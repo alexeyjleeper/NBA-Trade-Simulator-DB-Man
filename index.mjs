@@ -1,6 +1,6 @@
 import express from "express"
 import dotenv from "dotenv"
-import { DynamoDBClient, DynamoDBClientConfig, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import PlayerData from './storage/playerData.json' assert { type: 'json' };
 
 dotenv.config();
@@ -8,11 +8,6 @@ const PORT = process.env.PORT;
 const app = express();
 const dbClient = new DynamoDBClient({
     region: "us-east-1",
-    credentials: {
-        //env variables
-        accessKeyId: "",
-        secretAccessKey: ""
-    }
 });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -62,9 +57,10 @@ app.put("/update", async (req, res) => {
     //need to add a call to getCurrTeamScore
 
     try {
-        const put_res = await dbClient.send(new PutItemCommand(team1));
-        // Need to do testing so I can format res
-        console.log(put_res);
+        const [put_res1, put_res2] = Promises.all([
+            await dbClient.send(new PutItemCommand(team1)),
+            await dbClient.send(new PutItemCommand(team2))
+        ]);
     } catch(err) {
         console.log(err);
     }
@@ -83,6 +79,7 @@ class putDataHandler {
         this.team = data["Team"];
         this.putData = [
             {
+                "TableName": "Roster_Data",
                 "Item" : {
                     "Uuid" : {},
                     "Team" : {},
@@ -92,12 +89,12 @@ class putDataHandler {
                     "Picks" : {
                         "L" : []
                     },
-                    "Score" : {},
-                    "ReturnConsumedCapacity" : "Total",
-                    "TableName": "Roster_Data"
+                    "Score" : {}
                 },
+                "ReturnConsumedCapacity" : "TOTAL"
             },
             {
+                "TableName": "Roster_Data",
                 "Item" : {
                     "Uuid" : {},
                     "Team" : {},
@@ -107,10 +104,9 @@ class putDataHandler {
                     "Picks" : {
                         "L" : []
                     },
-                    "Score" : {},
-                    "ReturnConsumedCapacity" : "Total",
-                    "TableName": "Roster_Data"
-                }
+                    "Score" : {}
+                },
+                "ReturnConsumedCapacity" : "TOTAL"
             }
         ]
     }
@@ -174,7 +170,7 @@ class putDataHandler {
                     ]
                 });
             }
-            this.putData[i]["Item"]["Score"]["N"] = this.getScore(this.tradeTeams[i]);
+            this.putData[i]["Item"]["Score"]["N"] = `${this.getScore(this.tradeTeams[i])}`;
         }
     }
 
