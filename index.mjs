@@ -1,6 +1,6 @@
 import express from "express"
 import dotenv from "dotenv"
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, DynamoDBClientConfig, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import PlayerData from './storage/playerData.json' assert { type: 'json' };
 
 dotenv.config();
@@ -54,56 +54,15 @@ app.get("/search", async (req, res) => {
 app.put("/update", async (req, res) => {
     //params: uuid, new teams (post trade), new picks (post trade) players, curr user team
     //returns: curr team score
-
-    updateData(req.body);
-    
-
-
+    const data = new putDataHandler(req.body);
+    const [team1, team2] = data.getPutData();
+    console.log(team1, team2);
 
 
-    //send this to the class
-    //calculate provided overalls
-    //populate players list from like json data that is retreived and then
-    // modified with req body player trade data
-    const update_data = {
-        "Item" : {
-            "Uuid" : { "S" : "" },
-            "Team" : { "S" : "" },
-            "Overall" : { "N" : "" },
-            "Players" : {
-                //generate from a given list
-                "L" : [
-                    { "S" : "" },
-                    { "S" : "" },
-                    { "S" : "" },
-                    //...
-                ]
-            },
-            "Picks" : {
-                //im going to try automating the generation
-                // of this nested list from a given list of picks
-                // given list of picks will have to come from a json object
-                "L" : [
-                    {
-                        "L" : [
-                            // year
-                            { "N" : ""},
-                            //round
-                            { "N" : ""},
-                            //protected or not
-                            { "S" : ""}
-                        ],
-                        //...
-                    }
-                ]
-            }
-        },
-        "ReturnConsumedCapacity" : "Total",
-        "TableName": "Roster_Data"
-    }
+    //need to add a call to getCurrTeamScore
 
     try {
-        const put_res = await dbClient.send(new PutItemCommand(update_data));
+        const put_res = await dbClient.send(new PutItemCommand(team1));
         // Need to do testing so I can format res
         console.log(put_res);
     } catch(err) {
@@ -115,67 +74,116 @@ app.listen(PORT, () => {
     console.log(`Player search server listening on port ${PORT}...`);
 });
 
-class updateData {
+class putDataHandler {
     constructor(data) {
         this.uuid = data["Uuid"];
         this.tradeTeams = data["TradeTeams"];
         this.rosters = data["NewRosters"];
         this.picks = data["Picks"];
         this.team = data["Team"];
-        this.prevScore = data["Score"];
+        this.putData = [
+            {
+                "Item" : {
+                    "Uuid" : {},
+                    "Team" : {},
+                    "Players" : {
+                        "L" : []
+                    },
+                    "Picks" : {
+                        "L" : []
+                    },
+                    "Score" : {},
+                    "ReturnConsumedCapacity" : "Total",
+                    "TableName": "Roster_Data"
+                },
+            },
+            {
+                "Item" : {
+                    "Uuid" : {},
+                    "Team" : {},
+                    "Players" : {
+                        "L" : []
+                    },
+                    "Picks" : {
+                        "L" : []
+                    },
+                    "Score" : {},
+                    "ReturnConsumedCapacity" : "Total",
+                    "TableName": "Roster_Data"
+                }
+            }
+        ]
     }
 
-    updateScore() {
+    getScore(team) {
         // get index for accessing rosters
-        let accessIndex = 0
-        let currTeamInTrade = false;
-        for (let i = 0; i < tradeTeams.length; i++) {
-            if (team == tradeTeams[i]) {
-                currTeamInTrade = true;
-                accessIndex = i;
-            }
-        }
+        const accessIndex = this.tradeTeams.indexOf(team);
         
         //if user's team is not in the trade, score will not
         // have to be returned by the update endpoint
-        if (currTeamInTrade) {
-            let overall = 0;
-            let insideScoring = 0;
-            let outsideScoring = 0;
-            let athleticism = 0;
-            let playmaking = 0;
-            let rebounding = 0;
-            let defending = 0;
-            
-            //get array of top 8 players by overall
-            const sortByOvr = this.rosters.slice().sort((a, b) => playerData[b][1] - playerData[a][1])
-            let top8 = []
-            //handle for roster size of less than 8
-            if (sortByOvr.length > 7) {
-                top8 = sortByOvr.slice(0, 8);
-            } else {
-                top8 = sortByOvr
-            }
-            
-            //average for all attributes
-            for (player in top8) {
-                overall += playerData[player][1];
-                insideScoring = playerData[player][2];
-                outsideScoring = playerData[player][3];
-                athleticism = playerData[player][4];
-                playmaking = playerData[player][5];
-                rebounding = playerData[player][6];
-                defending = playerData[player][7];
-            }
-            overall = Math.floor(overall / top8.length);
-            insideScoring = Math.floor(insideScoring / top8.length);
-            outsideScoring = Math.floor(outsideScoring / top8.length);
-            athleticism = Math.floor(athleticism / top8.length);
-            playmaking = Math.floor(playmaking / top8.length);
-            rebounding = Math.floor(rebounding / top8.length);
-            defending = Math.floor(defending / top8.length);
-
-            
+        if (accessIndex === -1){
+            return 0;
         }
+
+        let insideScoring = 0;
+        let outsideScoring = 0;
+        let athleticism = 0;
+        let playmaking = 0;
+        let rebounding = 0;
+        let defending = 0;
+        
+        //get array of top 8 players by overall
+        const sortByOvr = this.rosters[accessIndex].slice().sort((a, b) => playerData[b][1] - playerData[a][1]);
+        const top8 = sortByOvr.length > 7 ? sortByOvr.slice(0, 8) : sortByOvr;
+        
+        //score calculation
+        top8.forEach(player => {
+            insideScoring += playerData[player][2];
+            console.log(`accumulated: ${insideScoring}`);
+            outsideScoring += playerData[player][3];
+            athleticism += playerData[player][4];
+            playmaking += playerData[player][5];
+            rebounding += playerData[player][6];
+            defending += playerData[player][7];
+        });
+        const length = top8.length;
+        insideScoring = Math.floor(insideScoring / length);
+        outsideScoring = Math.floor(outsideScoring / length);
+        athleticism = Math.floor(athleticism / length);
+        playmaking = Math.floor(playmaking / length);
+        rebounding = Math.floor(rebounding / length);
+        defending = Math.floor(defending / length);
+        const scoreSum = (insideScoring + outsideScoring + athleticism + playmaking + rebounding + defending) * 10;
+        return scoreSum;
+    }
+
+    populatePutData() {
+        //populate dictionaries for both teams in trade
+        for (let i = 0; i < 2; i++) {
+            this.putData[i]["Item"]["Uuid"]["S"] = this.uuid;
+            this.putData[i]["Item"]["Team"]["S"] = this.tradeTeams[i];
+            for (const player of this.rosters[i]) {
+                this.putData[i]["Item"]["Players"]["L"].push({"S" : player});
+            }
+            for (const pick of this.picks[i]) {
+                this.putData[i]["Item"]["Picks"]["L"].push({
+                    "L" : [
+                        { "N" : pick[0]},
+                        { "N" : pick[1]},
+                        { "S" : pick[2]}
+                    ]
+                });
+            }
+            this.putData[i]["Item"]["Score"]["N"] = this.getScore(this.tradeTeams[i]);
+        }
+    }
+
+    getPutData() {
+        this.populatePutData();
+        return this.putData;
+    }
+
+    getCurrTeamScore() {
+        return this.getScore(this.team);
     }
 }
