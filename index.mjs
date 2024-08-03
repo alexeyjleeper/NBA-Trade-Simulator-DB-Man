@@ -17,29 +17,50 @@ const playerData = PlayerData["playerData"];
 // need a dict with team:starting_ovr
 
 app.get("/search", async (req, res) => {
-    //params: uuid, team
-    //returns: roster data (playerdata, picks, current score)
+    // Description - Returns a list of players, draft picks, and the current score
+    // for the provided team
+    // @param {string} uuid
+    // @param {string} team
+    // @param {bool} db_access
+    // @returns {Promise<Object>} json object
+    //      - {Array} players array
+    //      - {Array} draft picks
+    //          - {Array} [year, round, "P" (protected) or "U" (unprotected)]
+    //      - {Int} score
 
-    // unpack uuid and team from here
-    const search_params = req.body
+    const team = req.query.team;
+    const uuid = req.query.uuid;
+    const db_access = req.query.db_access === 'true';
 
-    const client_params = {
-        TableName: "Roster_Data",
+    // return object for team that isnt in db
+    if (!db_access) {
+        //call to class object that will construct an obj i can return here
+    }
+
+    const params = {
+        "TableName" : "Roster_Data",
         "Key": {
             "Uuid" : {
-                "S" : ""
+                "S" : uuid
             },
             "Team" : {
-                "S" : ""
+                "S" : team
             }
-        }
+        },
+        "ReturnConsumedCapacity" : "TOTAL"
     }
 
     try {
         const team_data = await dbClient.send(new GetItemCommand(params));
-        // Need to do testing so I can format res
+
         console.log(team_data);
-        // need to do score calculations after I get the players list
+
+        // if the team I queried for is not in the db 
+        if ("Item" in team_data) {
+            console.log('success');
+        }
+
+
     } catch(err) {
         console.log(err);
     }
