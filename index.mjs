@@ -28,41 +28,32 @@ app.get("/search", async (req, res) => {
     //          - {Array} [year, round, "P" (protected) or "U" (unprotected)]
     //      - {Int} score
 
-    const team = req.query.team;
-    const uuid = req.query.uuid;
-    const db_access = req.query.db_access === 'true';
+    let players, picks, score;
+    const handler = GetDataHandler(req.query);
 
-    // return object for team that isnt in db
-    if (!db_access) {
-        //call to class object that will construct an obj i can return here
-    }
-
-    const params = {
-        "TableName" : "Roster_Data",
-        "Key": {
-            "Uuid" : {
-                "S" : uuid
-            },
-            "Team" : {
-                "S" : team
-            }
-        },
-        "ReturnConsumedCapacity" : "TOTAL"
+    if (!db) {
+        console.log('non-db');
+    } else {
+        forDBGet = handler.formatForDBGet();
+        let dbRes;
+        try {
+            dbRes = await dbClient.send(new GetItemCommand(forDBGet));
+        } catch(err) {
+            console.log(err);
+            res.status(500).send('Error contacting DynamoDB: ', err);
+        }
+        [players, picks, score] = handler.dbResToEndpointRes(dbRes);
     }
 
     try {
-        const team_data = await dbClient.send(new GetItemCommand(params));
-
-        console.log(team_data);
-
-        // if the team I queried for is not in the db 
-        if ("Item" in team_data) {
-            console.log('success');
-        }
-
-
+        res.json({
+            "Players" : players,
+            "Picks" : picks,
+            "Score" : score
+        });
     } catch(err) {
         console.log(err);
+        res.status(500).send('Internal Server Error: ', err);
     }
 });
 
@@ -70,12 +61,12 @@ app.get("/search", async (req, res) => {
 app.put("/update", async (req, res) => {
     //params: uuid, new teams (post trade), new picks (post trade) players, curr user team
     //returns: curr team score
-    const data = new putDataHandler(req.body);
-    const [team1, team2] = data.getPutData();
-    console.log(team1, team2);
-
+    const data = new PutDataHandler(req.body, res);
+    const [team1, team2] = data.formatForDBPut();
+    
 
     //need to add a call to getCurrTeamScore
+
 
     try {
         const [put_res1, put_res2] = Promises.all([
@@ -91,8 +82,53 @@ app.listen(PORT, () => {
     console.log(`Player search server listening on port ${PORT}...`);
 });
 
-class putDataHandler {
-    constructor(data) {
+class GetDataHandler {
+    constructor (query) {
+        this.uuid = query.uuid;
+        this.team = query.team;
+        this.db = query.team === 'true';
+    }
+
+    localBuildItems () {
+        console.log('non-db build');
+    }
+
+    formatForDBGet () {
+        return {
+            "TableName" : "Roster_Data",
+            "Key": {
+                "Uuid" : {
+                    "S" : this.uuid
+                },
+                "Team" : {
+                    "S" : this.team
+                }
+            },
+            "ReturnConsumedCapacity" : "TOTAL"
+        }
+    }
+
+    dbResToEndpointRes (dbObj) {
+        const players = [];
+        for (const item of dbObj.Item.Players.L) {
+            players.push(item.S);
+        }
+
+        const picks = []
+        for (const item of dbObj.Item.Picks.L) {
+            const pickData = []
+            for (const pick_part of item.L) {
+                pickData.push(Object.values(pick_part)[0]);
+            }
+            picks.push(pickData)
+        }
+
+        return [players, picks, dbObj.Item.Score.N]
+    }
+}
+
+class PutDataHandler {
+    constructor (data, res) {
         this.uuid = data["Uuid"];
         this.tradeTeams = data["TradeTeams"];
         this.rosters = data["NewRosters"];
@@ -174,7 +210,7 @@ class putDataHandler {
         return scoreSum;
     }
 
-    populatePutData() {
+    populatePutItem() {
         //populate dictionaries for both teams in trade
         for (let i = 0; i < 2; i++) {
             this.putData[i]["Item"]["Uuid"]["S"] = this.uuid;
@@ -195,8 +231,8 @@ class putDataHandler {
         }
     }
 
-    getPutData() {
-        this.populatePutData();
+    formatForDBGet() {
+        this.populatePutItem();
         return this.putData;
     }
 
