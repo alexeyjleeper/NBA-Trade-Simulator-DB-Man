@@ -1,8 +1,9 @@
-import express from "express"
-import dotenv from "dotenv"
+import express from "express";
+import dotenv from "dotenv";
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import PlayerData from './storage/playerData.json' assert { type: 'json' };
 import TeamData from './storage/teamData.json' assert { type: 'json' };
+import cors from "cors";
 
 dotenv.config();
 const PORT = process.env.PORT;
@@ -12,6 +13,10 @@ const dbClient = new DynamoDBClient({
 });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cors({
+    origin: "http://localhost:3000",
+    methods: ['GET', 'PUT']
+}));
 
 /**
  * @api {get} /search Get Players, Picks, and Score
