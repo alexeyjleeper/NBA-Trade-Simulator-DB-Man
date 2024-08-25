@@ -175,7 +175,6 @@ class PutDataHandler {
         this.tradeTeams = data["TradeTeams"];
         this.rosters = data["NewRosters"];
         this.picks = data["Picks"];
-        this.team = data["Team"];
         this.newTeamScores = [];
         this.putData = [
             {
