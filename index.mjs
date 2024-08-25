@@ -90,7 +90,7 @@ app.put("/update", async (req, res) => {
     }
 
     try {
-        res.send(handler.getCurrTeamScore());
+        res.send(handler.getBothScores());
     } catch(err) {
         res.status(500).send("Internal Server Error: ", err);
     }
@@ -176,6 +176,7 @@ class PutDataHandler {
         this.rosters = data["NewRosters"];
         this.picks = data["Picks"];
         this.team = data["Team"];
+        this.newTeamScores = [];
         this.putData = [
             {
                 "TableName": "Roster_Data",
@@ -256,8 +257,8 @@ class PutDataHandler {
         playmaking = Math.floor(playmaking / length);
         rebounding = Math.floor(rebounding / length);
         defending = Math.floor(defending / length);
-        const scoreSum = [insideScoring, outsideScoring, athleticism, playmaking, rebounding, defending];
-        return scoreSum;
+        const scoreArray = [insideScoring, outsideScoring, athleticism, playmaking, rebounding, defending];
+        return scoreArray;
     }
 
     /**
@@ -286,6 +287,7 @@ class PutDataHandler {
             }
 
             const scoreArr = this.getScore(this.tradeTeams[i]);
+            this.newTeamScores.push(scoreArr);
             for (const item of scoreArr) {
                 this.putData[i]["Item"]["Score"]["L"].append({ "N" : item})
             }
@@ -303,11 +305,11 @@ class PutDataHandler {
     }
 
     /**
-     * @method getCurrTeamScore
-     * @description Retrieves the current score for the user's selected team.
-     * @returns {Number[]} The score array for the user's team.
+     * @method getBothScores
+     * @description Returns the calculated score arrays for both teams in trade
+     * @returns {[Number[], Number[]]} Array of score arrays for both teams in trade
      */
-    getCurrTeamScore() {
-        return this.getScore(this.team);
+    getBothScores() {
+        return this.newTeamScores;
     }
 }
