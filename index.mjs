@@ -1,6 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, GetItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
 import PlayerData from './storage/playerData.json' assert { type: 'json' };
 import TeamData from './storage/teamData.json' assert { type: 'json' };
 import cors from "cors";
@@ -15,22 +15,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
     origin: "http://localhost:3000",
-    methods: ['GET', 'PUT']
+    methods: ['GET', 'PUT', 'DELETE']
 }));
 
 /**
  * @api {get} /search Get Players, Picks, and Score
- * @apiDescription Returns a list of players, draft picks, and the current score for the provided team.
+ * @apiDescription Returns a list of players, draft picks, and the current score array for the provided team.
  * @apiParam {String} uuid The unique identifier for the team.
  * @apiParam {String} team The name of the team.
  * @apiParam {Boolean} db Access the database if true, otherwise use local file storage.
  * @apiSuccess {Object} response The response object.
  * @apiSuccess {String[]} response.Players Array of player names.
- * @apiSuccess {Object[][]} response.Picks Array of draft picks, where each pick is an array of [year, round, type].
- * @apiSuccess {Number} response.Score The current score of the team.
+ * @apiSuccess {String[]} response.Picks Array of draft picks.
+ * @apiSuccess {Number[]} response.Score The current score array of the team.
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
-app.get("/search", async (req, res) => {
+app.get("/", async (req, res) => {
     let players, picks, score;
     const handler = new GetDataHandler(req.query);
     const db = req.query.db === 'true';
@@ -70,22 +70,17 @@ app.get("/search", async (req, res) => {
  * @apiParam {String} req.body.Uuid The unique identifier for the trade.
  * @apiParam {String[]} req.body.TradeTeams Array of two team names involved in the trade.
  * @apiParam {String[][]} req.body.NewRosters Array of two arrays representing the new rosters for each team post-trade.
- * @apiParam {Object[][]} req.body.Picks Array of two arrays representing the draft picks for each team post-trade.
- * @apiParam {String} req.body.Team The user's currently selected team.
- * @apiSuccess {Number[]} score The updated score array for the user's team. Array contains [insideScoring, outsideScoring, athleticism, playmaking, rebounding, defending].
+ * @apiParam {String[][]} req.body.Picks Array of two arrays representing the draft picks for each team post-trade.
+ * @apiSuccess {Number[][]} score The updated score array for both teams in trade.
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
-app.put("/update", async (req, res) => {
+app.put("/", async (req, res) => {
+    console.log(req.body);
     const handler = new PutDataHandler(req.body);
-    const [team1, team2] = handler.formatForDBPut();
-
+    const requests = handler.formatForDBPut();
     try {
-        const [put_res1, put_res2] = Promises.all([
-            await dbClient.send(new PutItemCommand(team1)),
-            await dbClient.send(new PutItemCommand(team2))
-        ]);
+        const putResults = await Promise.all(requests);
     } catch(err) {
-        console.log(err);
         res.status(500).send("Error contacting DynamoDB: ", err);
     }
 
@@ -95,6 +90,64 @@ app.put("/update", async (req, res) => {
         res.status(500).send("Internal Server Error: ", err);
     }
 });
+
+/**
+ * @api {delete} /delete all data under given uuid in DynamoDB
+ * @apiDescription Deletes data for all provided teams under the given uuid and returns a status of 204 if successful
+ * @apiParam {Object} req.body The request body.
+ * @apiParam {String} req.body.Uuid The unique identifier of the user.
+ * @apiParam {String[]} req.body.Teams Array of all teams to be deleted from the db.
+ * @apiSuccess (204) NoContent.
+ * @apiError (500) {String} InternalServerError Internal Server Error message.
+ */
+app.delete("/", async (req, res) => {
+    const handler = new DeleteDataHandler(req.body);
+    const requests = handler.buildDeleteInputs();
+    try {
+        // handle for empty req.body.Teams array
+        if (requests) {
+            const putResults = await Promise.all(requests);
+        }
+    } catch(error) {
+        console.log("DynamoDB - DeleteItemCommand error: " + error);
+    }
+
+    try {
+        res.status(200).send('OK');
+    } catch(err) {
+        res.status(500).send("Internal Server Error: ", err);
+    }
+})
+
+/**
+ * @class DeleteDataHandler
+ * @description Handles operations related to deleting database entries
+ */
+class DeleteDataHandler {
+    constructor (data) {
+        this.uuid = data["Uuid"];
+        this.teams = data["Teams"];
+    }
+
+    /**
+     * @method buildDeleteInputs
+     * @description creates an array of dynamoDB requests to clear every team in the database
+     * @returns {Object[]} Array of dynamoDB requests
+     */
+    buildDeleteInputs() {
+        return this.teams.map(team => dbClient.send(new DeleteItemCommand({
+            "TableName" : "Roster_Data",
+            "Key" : {
+                "Uuid" : {
+                    "S" : this.uuid
+                },
+                "Team" : {
+                    "S" : team
+                }
+            }
+        })));
+    }
+}
 
 app.listen(PORT, () => {
     console.log(`Player search server listening on port ${PORT}...`);
@@ -123,7 +176,7 @@ class GetDataHandler {
     /**
      * @method formatForDBGet
      * @description Formats the query for DynamoDB retrieval.
-     * @returns {Object} The formatted query object for DynamoDB.
+     * @returns {Object} The formatted query object for DynamoDB Get operation.
      */
     formatForDBGet () {
         return {
@@ -142,7 +195,7 @@ class GetDataHandler {
 
     /**
      * @method dbResToEndpointRes
-     * @description Converts DynamoDB response format to endpoint response format.
+     * @description Converts DynamoDB response to a cleaner endpoint response format.
      * @param {Object} dbObj The DynamoDB response object.
      * @returns {Array} Array containing players, picks, and score.
      */
@@ -152,16 +205,21 @@ class GetDataHandler {
             players.push(item.S);
         }
 
-        const picks = []
+        const picks = [];
         for (const item of dbObj.Item.Picks.L) {
-            const pickData = []
+            const pickData = [];
             for (const pick_part of item.L) {
                 pickData.push(Object.values(pick_part)[0]);
             }
-            picks.push(pickData)
+            picks.push(pickData);
         }
 
-        return [players, picks, dbObj.Item.Score.N]
+        const score = [];
+        for (const item of dbObj.Item.Score.L) {
+            score.push(item);
+        }
+
+        return [players, picks, dbObj.Item.Score.L]
     }
 }
 
@@ -276,31 +334,25 @@ class PutDataHandler {
             }
 
             for (const pick of this.picks[i]) {
-                this.putData[i]["Item"]["Picks"]["L"].push({
-                    "L" : [
-                        { "N" : pick[0]},
-                        { "N" : pick[1]},
-                        { "S" : pick[2]}
-                    ]
-                });
+                this.putData[i]["Item"]["Picks"]["L"].push({"S" : pick});
             }
 
             const scoreArr = this.getScore(this.tradeTeams[i]);
             this.newTeamScores.push(scoreArr);
             for (const item of scoreArr) {
-                this.putData[i]["Item"]["Score"]["L"].append({ "N" : item})
+                this.putData[i]["Item"]["Score"]["L"].push({ "N" : `${item}`});
             }
         }
     }
 
     /**
      * @method formatForDBPut
-     * @description Formats the data for DynamoDB put operations.
-     * @returns {Object[]} Array of formatted data for both teams.
+     * @description Creates an array of dynamoDB requests to update both teams in put operation
+     * @returns {Object[]} Array of dynamoDB requests
      */
-    formatForDBGet() {
+    formatForDBPut() {
         this.populatePutItem();
-        return this.putData;
+        return this.putData.map(input => dbClient.send(new PutItemCommand(input)));
     }
 
     /**
