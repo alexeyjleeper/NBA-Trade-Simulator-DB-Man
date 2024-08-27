@@ -38,7 +38,7 @@ app.get("/", async (req, res) => {
     if (!db) {
         [players, picks, score] = handler.fromFileStorage();
     } else {
-        forDBGet = handler.formatForDBGet();
+        const forDBGet = handler.formatForDBGet();
         let dbRes;
 
         try {
@@ -207,16 +207,12 @@ class GetDataHandler {
 
         const picks = [];
         for (const item of dbObj.Item.Picks.L) {
-            const pickData = [];
-            for (const pick_part of item.L) {
-                pickData.push(Object.values(pick_part)[0]);
-            }
-            picks.push(pickData);
+            picks.push(item.S);
         }
 
         const score = [];
         for (const item of dbObj.Item.Score.L) {
-            score.push(item);
+            score.push(item.N);
         }
 
         return [players, picks, dbObj.Item.Score.L]
