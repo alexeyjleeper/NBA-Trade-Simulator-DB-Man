@@ -75,7 +75,6 @@ app.get("/", async (req, res) => {
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
 app.put("/", async (req, res) => {
-    console.log(req.body);
     const handler = new PutDataHandler(req.body);
     const requests = handler.formatForDBPut();
     try {
@@ -161,7 +160,6 @@ class GetDataHandler {
     constructor (query) {
         this.uuid = query.uuid;
         this.team = query.team;
-        this.db = query.team === 'true';
     }
 
     /**
@@ -212,10 +210,10 @@ class GetDataHandler {
 
         const score = [];
         for (const item of dbObj.Item.Score.L) {
-            score.push(item.N);
+            score.push(Number(item.N));
         }
 
-        return [players, picks, dbObj.Item.Score.L]
+        return [players, picks, score]
     }
 }
 
