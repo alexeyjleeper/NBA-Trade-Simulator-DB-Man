@@ -1,9 +1,10 @@
 import express from "express";
 import dotenv from "dotenv";
 import { DynamoDBClient, GetItemCommand, PutItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
-import PlayerData from './storage/playerData.json' assert { type: 'json' };
-import TeamData from './storage/teamData.json' assert { type: 'json' };
+import PlayerData from './storage/PlayerData.js';
+import TeamData from './storage/TeamData.js';
 import cors from "cors";
+import logger from './logger.js';
 
 dotenv.config();
 const PORT = process.env.PORT;
@@ -17,6 +18,7 @@ app.use(cors({
     origin: "http://localhost:3000",
     methods: ['GET', 'PUT', 'DELETE']
 }));
+logger.info('db_manager started');
 
 /**
  * @api {get} /search Get Players, Picks, and Score
@@ -31,9 +33,16 @@ app.use(cors({
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
 app.get("/", async (req, res) => {
+    logger.info('GET request received', {
+        uuid: req.query.uuid,
+        team: req.query.team,
+        db: req.query.db
+    });
+
+    //init variables and class
     let players, picks, score;
-    const handler = new GetDataHandler(req.query);
     const db = req.query.db === 'true';
+    const handler = new GetDataHandler(req.query);
 
     if (!db) {
         [players, picks, score] = handler.fromFileStorage();
@@ -43,9 +52,10 @@ app.get("/", async (req, res) => {
 
         try {
             dbRes = await dbClient.send(new GetItemCommand(forDBGet));
-        } catch(err) {
-            console.log(err);
-            res.status(500).send('Error contacting DynamoDB: ', err);
+        } catch(error) {
+            console.log(error);
+            logger.error('DynamoDbClient error, GetItemCommand', error.message, error.stack);
+            res.status(500).send('Internal Server Error: ', err);
         }
 
         [players, picks, score] = handler.dbResToEndpointRes(dbRes);
@@ -57,8 +67,8 @@ app.get("/", async (req, res) => {
             "Picks" : picks,
             "Score" : score
         });
-    } catch(err) {
-        console.log(err);
+    } catch(error) {
+        logger.error('Error sending response to client', error.message, error.stack);
         res.status(500).send('Internal Server Error: ', err);
     }
 });
@@ -75,18 +85,23 @@ app.get("/", async (req, res) => {
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
 app.put("/", async (req, res) => {
+    logger.info('PUT request received', req.body);
+
     const handler = new PutDataHandler(req.body);
     const requests = handler.formatForDBPut();
+
     try {
-        const putResults = await Promise.all(requests);
-    } catch(err) {
-        res.status(500).send("Error contacting DynamoDB: ", err);
+        await Promise.all(requests);
+    } catch(error) {
+        logger.error('DynamoDBClient error, PutItemCommand', error.message, error.stack);
+        res.status(500).send("Internal Server Error: ", err);
     }
 
     try {
         res.send(handler.getBothScores());
-    } catch(err) {
-        res.status(500).send("Internal Server Error: ", err);
+    } catch(error) {
+        logger.error('Error sending response to client', error.message, error.stack);
+        res.status(500).send("Internal Server Error: ", error);
     }
 });
 
@@ -100,53 +115,28 @@ app.put("/", async (req, res) => {
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
 app.delete("/", async (req, res) => {
+    logger.info('DELETE request received', req.body);
+
     const handler = new DeleteDataHandler(req.body);
     const requests = handler.buildDeleteInputs();
+
     try {
         // handle for empty req.body.Teams array
         if (requests) {
             const putResults = await Promise.all(requests);
         }
     } catch(error) {
-        console.log("DynamoDB - DeleteItemCommand error: " + error);
+        logger.error('DynamoDBClient error, DeleteItemCommand', error.message, error.stack);
+        res.status(500).send("Internal Server Error: ", error);
     }
 
     try {
         res.status(200).send('OK');
-    } catch(err) {
-        res.status(500).send("Internal Server Error: ", err);
+    } catch(error) {
+        logger.error('Error sending response to client', error.message, error.stack);
+        res.status(500).send("Internal Server Error: ", error);
     }
 })
-
-/**
- * @class DeleteDataHandler
- * @description Handles operations related to deleting database entries
- */
-class DeleteDataHandler {
-    constructor (data) {
-        this.uuid = data["Uuid"];
-        this.teams = data["Teams"];
-    }
-
-    /**
-     * @method buildDeleteInputs
-     * @description creates an array of dynamoDB requests to clear every team in the database
-     * @returns {Object[]} Array of dynamoDB requests
-     */
-    buildDeleteInputs() {
-        return this.teams.map(team => dbClient.send(new DeleteItemCommand({
-            "TableName" : "Roster_Data",
-            "Key" : {
-                "Uuid" : {
-                    "S" : this.uuid
-                },
-                "Team" : {
-                    "S" : team
-                }
-            }
-        })));
-    }
-}
 
 app.listen(PORT, () => {
     console.log(`Player search server listening on port ${PORT}...`);
@@ -356,5 +346,35 @@ class PutDataHandler {
      */
     getBothScores() {
         return this.newTeamScores;
+    }
+}
+
+/**
+ * @class DeleteDataHandler
+ * @description Handles operations related to deleting database entries
+ */
+class DeleteDataHandler {
+    constructor (data) {
+        this.uuid = data["Uuid"];
+        this.teams = data["Teams"];
+    }
+
+    /**
+     * @method buildDeleteInputs
+     * @description creates an array of dynamoDB requests to clear every team in the database
+     * @returns {Object[]} Array of dynamoDB requests
+     */
+    buildDeleteInputs() {
+        return this.teams.map(team => dbClient.send(new DeleteItemCommand({
+            "TableName" : "Roster_Data",
+            "Key" : {
+                "Uuid" : {
+                    "S" : this.uuid
+                },
+                "Team" : {
+                    "S" : team
+                }
+            }
+        })));
     }
 }

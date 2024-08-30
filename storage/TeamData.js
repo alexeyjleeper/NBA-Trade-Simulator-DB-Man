@@ -1,4 +1,4 @@
-{
+const TeamData = {
     "Atlanta Hawks" : {
         "players" : [
             "Saddiq Bey", 
@@ -1229,4 +1229,6 @@
         ],
         "score" :  [ 64, 77, 77, 66, 56, 60 ]
     }
-}
+};
+
+export default TeamData;

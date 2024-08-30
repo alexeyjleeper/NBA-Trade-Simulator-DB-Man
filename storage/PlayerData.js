@@ -1,4 +1,4 @@
-{
+const PlayerData = {
     "Precious Achiuwa": ["New York Knicks", 78, 66, 67, 79, 47, 81, 68],
     "Steven Adams": ["Houston Rockets", 80, 70, 58, 71, 49, 92, 70],
     "Bam Adebayo": ["Miami Heat", 88, 81, 76, 84, 70, 76, 78],
@@ -529,4 +529,6 @@
     "Omer Yurtseven" : ["Utah Jazz", 74, 66, 73, 70, 47, 90, 54],
     "Cody Zeller" : ["New Orleans Pelicans", 73, 70, 63, 76, 52, 78, 53],
     "Ivica Zubac" : ["Los Angeles Clippers", 83, 78, 75, 65, 42, 86, 54]
-}
+};
+
+export default PlayerData;
