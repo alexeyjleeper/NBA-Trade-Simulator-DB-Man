@@ -1,6 +1,7 @@
 # Welcome the Database Management Service
 
-This service works with AWS DynamoDB to store and modify team data for the NBA Trade Simulator UI.  
+This service works with AWS DynamoDB to store and modify team data for the NBA Trade Simulator UI.
+
 The other microservices in the NBA Trade Simulator Architecture can be found at:  
 ![https://github.com/alexeyjleeper/NBA-Trade-Simulator-UI](https://github.com/alexeyjleeper/NBA-Trade-Simulator-UI)  
 ![https://github.com/josh-tan77/imgMicroservice](https://github.com/josh-tan77/imgMicroservice)
