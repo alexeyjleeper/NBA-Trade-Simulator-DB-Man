@@ -107,7 +107,7 @@ class Logger {
      */
     error(message, error, stack) {
         this.rotateLogs();
-        const filepath = this.getLogFilePath;
+        const filepath = this.getLogFilePath();
         const entry = {
             timeStamp: new Date().toISOString(),
             message: message,

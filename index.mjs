@@ -14,10 +14,7 @@ const dbClient = new DynamoDBClient({
 });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({
-    origin: "http://localhost:3000",
-    methods: ['GET', 'PUT', 'DELETE']
-}));
+app.use(cors());
 logger.info('db_manager started');
 
 /**
@@ -33,10 +30,20 @@ logger.info('db_manager started');
  * @apiError (500) {String} InternalServerError Internal Server Error message.
  */
 app.get("/", async (req, res) => {
+    const qteam = req.query.team;
+    const quuid = req.query.uuid;
+    const qdb = req.query.db;
+
+    //handle issue with missing query parameters sometimes
+    if (!(qteam && quuid && qdb)) {
+        res.status(400).send('Query parameter(s) missing, please retry');
+        return;
+    }
+
     logger.info('GET request received', {
-        uuid: req.query.uuid,
-        team: req.query.team,
-        db: req.query.db
+        uuid: quuid,
+        team: qteam,
+        db: qdb
     });
 
     //init variables and class
@@ -55,7 +62,7 @@ app.get("/", async (req, res) => {
         } catch(error) {
             console.log(error);
             logger.error('DynamoDbClient error, GetItemCommand', error.message, error.stack);
-            res.status(500).send('Internal Server Error: ', err);
+            res.status(500).send('Internal Server Error: ', error);
         }
 
         [players, picks, score] = handler.dbResToEndpointRes(dbRes);
@@ -94,7 +101,7 @@ app.put("/", async (req, res) => {
         await Promise.all(requests);
     } catch(error) {
         logger.error('DynamoDBClient error, PutItemCommand', error.message, error.stack);
-        res.status(500).send("Internal Server Error: ", err);
+        res.status(500).send("Internal Server Error: ", error);
     }
 
     try {
