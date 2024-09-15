@@ -10,6 +10,10 @@ The other microservices in the NBA Trade Simulator Architecture can be found at:
 ![UML sequence Diagram](UML_sequence.jpeg)
 
 # Installation
+
+built with:
+node 18.17.1
+
 ## Install Dependencies
 
 >npm install
