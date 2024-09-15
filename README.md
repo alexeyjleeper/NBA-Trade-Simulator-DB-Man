@@ -16,7 +16,7 @@ The other microservices in the NBA Trade Simulator Architecture can be found at:
 ## Configure Environment Variables
 
 set AWS_ACCESS_KEY_ID to your IAM user access key for DynamoDB  
-set AWS_SECRET_ACCESS_KEY to your IAM user secret access key for DynamoDB
+set AWS_SECRET_ACCESS_KEY to your IAM user secret access key for DynamoDB  
 set PORT to your desired port
 
 ## Run
